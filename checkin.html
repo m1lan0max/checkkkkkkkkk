@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ticket Check-in</title>
+
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- QR Scanner -->
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont;
+  background: linear-gradient(135deg, #020617, #020617);
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card {
+  background: rgba(15, 23, 42, 0.95);
+  padding: 2.5rem;
+  border-radius: 24px;
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 25px 70px rgba(0,0,0,.7);
+}
+#reader {
+  width: 100%;
+  margin-top: 1rem;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.status {
+  margin-top: 1.2rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.valid { color: #4ade80; }
+.used { color: #facc15; }
+.invalid { color: #f87171; }
+.ticket-box {
+  margin-top: 1rem;
+  background: rgba(30,41,59,.6);
+  padding: 1rem;
+  border-radius: 16px;
+  text-align: left;
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>📷 Ticket Check-in</h1>
+  <p>Scan ticket QR code</p>
+
+  <div id="reader"></div>
+  <div id="result"></div>
+</div>
+
+<script>
+// ================== SUPABASE CONFIG ==================
+const SUPABASE_URL = "https://ocnobfbigglpxoxsevkt.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbm9iZmJpZ2dscHhveHNldmt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4OTMzNjgsImV4cCI6MjA4MDQ2OTM2OH0.WONrpTEFiESu9t3Olq0LAnpuaXkwxRRfD8SzpBtNdMM";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const resultEl = document.getElementById('result');
+let scanning = true;
+
+async function verifyTicket(ticketUrl) {
+  scanning = false;
+
+  if (!ticketUrl.includes('ticketId=')) {
+    resultEl.innerHTML = `<div class='status invalid'>❌ Invalid QR</div>`;
+    return;
+  }
+
+  const ticketId = new URL(ticketUrl).searchParams.get('ticketId');
+
+  const { data, error } = await supabaseClient
+    .from('tickets')
+    .select('*')
+    .eq('id', ticketId)
+    .single();
+
+  if (error || !data) {
+    resultEl.innerHTML = `<div class='status invalid'>❌ Ticket not found</div>`;
+    return;
+  }
+
+  if (data.used) {
+    resultEl.innerHTML = `
+      <div class='status used'>⚠️ Ticket Already Used</div>
+      <div class='ticket-box'>
+        <strong>Name:</strong> ${data.full_name}<br>
+        <strong>Type:</strong> ${data.ticket_type}
+      </div>
+    `;
+    return;
+  }
+
+  await supabaseClient
+    .from('tickets')
+    .update({ used: true, used_at: new Date().toISOString() })
+    .eq('id', ticketId);
+
+  resultEl.innerHTML = `
+    <div class='status valid'>✅ Check-in Successful</div>
+    <div class='ticket-box'>
+      <strong>Name:</strong> ${data.full_name}<br>
+      <strong>Type:</strong> ${data.ticket_type}<br>
+      <strong>Quantity:</strong> ${data.quantity}
+    </div>
+  `;
+}
+
+// ================== START CAMERA SCAN ==================
+const html5QrCode = new Html5Qrcode("reader");
+
+Html5Qrcode.getCameras().then(devices => {
+  if (devices && devices.length) {
+    html5QrCode.start(
+      devices[0].id,
+      { fps: 10, qrbox: 250 },
+      qrCodeMessage => {
+        if (scanning) {
+          html5QrCode.stop();
+          verifyTicket(qrCodeMessage);
+        }
+      }
+    );
+  }
+}).catch(err => {
+  resultEl.innerHTML = `<div class='status invalid'>❌ Camera not available</div>`;
+});
+</script>
+
+</body>
+</html>
