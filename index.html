@@ -51,16 +51,28 @@ body {
   border-radius: 16px;
   text-align: left;
 }
+button {
+  margin-top: 1rem;
+  width: 100%;
+  padding: 0.8rem;
+  border-radius: 14px;
+  border: none;
+  background: #38bdf8;
+  color: #020617;
+  font-weight: 700;
+  cursor: pointer;
+}
 </style>
 </head>
 <body>
 
 <div class="card">
-  <h1>📷 Ticket Check-in</h1>
+  <h1>📷 Ticket Check‑in</h1>
   <p>Scan ticket QR code</p>
 
   <div id="reader"></div>
   <div id="result"></div>
+  <button id="rescanBtn" style="display:none" onclick="startScanner()">Scan Another Ticket</button>
 </div>
 
 <script>
@@ -70,13 +82,14 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const resultEl = document.getElementById('result');
+const rescanBtn = document.getElementById('rescanBtn');
+let html5QrCode;
 let scanning = true;
 
+// ================== VERIFY TICKET ==================
 async function verifyTicket(ticketUrl) {
-  scanning = false;
-
   if (!ticketUrl.includes('ticketId=')) {
-    resultEl.innerHTML = `<div class='status invalid'>❌ Invalid QR</div>`;
+    showResult('❌ Invalid QR Code', 'invalid');
     return;
   }
 
@@ -89,7 +102,7 @@ async function verifyTicket(ticketUrl) {
     .single();
 
   if (error || !data) {
-    resultEl.innerHTML = `<div class='status invalid'>❌ Ticket not found</div>`;
+    showResult('❌ Ticket not found', 'invalid');
     return;
   }
 
@@ -101,6 +114,7 @@ async function verifyTicket(ticketUrl) {
         <strong>Type:</strong> ${data.ticket_type}
       </div>
     `;
+    rescanBtn.style.display = 'block';
     return;
   }
 
@@ -110,36 +124,63 @@ async function verifyTicket(ticketUrl) {
     .eq('id', ticketId);
 
   resultEl.innerHTML = `
-    <div class='status valid'>✅ Check-in Successful</div>
+    <div class='status valid'>✅ Check‑in Successful</div>
     <div class='ticket-box'>
       <strong>Name:</strong> ${data.full_name}<br>
       <strong>Type:</strong> ${data.ticket_type}<br>
       <strong>Quantity:</strong> ${data.quantity}
     </div>
   `;
+
+  rescanBtn.style.display = 'block';
 }
 
-// ================== START CAMERA SCAN ==================
-const html5QrCode = new Html5Qrcode("reader");
+function showResult(message, type) {
+  resultEl.innerHTML = `<div class='status ${type}'>${message}</div>`;
+  rescanBtn.style.display = 'block';
+}
 
-Html5Qrcode.getCameras().then(devices => {
-  if (devices && devices.length) {
+// ================== START SCANNER (BACK CAMERA) ==================
+function startScanner() {
+  resultEl.innerHTML = '';
+  rescanBtn.style.display = 'none';
+  scanning = true;
+
+  html5QrCode = new Html5Qrcode('reader');
+
+  Html5Qrcode.getCameras().then(devices => {
+    if (!devices || devices.length === 0) {
+      showResult('❌ No camera found', 'invalid');
+      return;
+    }
+
+    let backCamera = devices.find(d =>
+      d.label.toLowerCase().includes('back') ||
+      d.label.toLowerCase().includes('rear') ||
+      d.label.toLowerCase().includes('environment')
+    );
+
+    if (!backCamera) backCamera = devices[devices.length - 1];
+
     html5QrCode.start(
-      devices[0].id,
-      { fps: 10, qrbox: 250 },
+      backCamera.id,
+      { fps: 10, qrbox: { width: 250, height: 250 } },
       qrCodeMessage => {
-        if (scanning) {
-          html5QrCode.stop();
-          verifyTicket(qrCodeMessage);
-        }
+        if (!scanning) return;
+        scanning = false;
+        html5QrCode.stop();
+        verifyTicket(qrCodeMessage);
       }
     );
-  }
-}).catch(err => {
-  resultEl.innerHTML = `<div class='status invalid'>❌ Camera not available</div>`;
-});
+
+  }).catch(() => {
+    showResult('❌ Camera permission denied', 'invalid');
+  });
+}
+
+// Auto start
+startScanner();
 </script>
 
 </body>
 </html>
-
