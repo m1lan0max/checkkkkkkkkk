@@ -1,185 +1,98 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Ticket Check-in</title>
+<meta charset="UTF-8">
+<title>Check In</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- QR Scanner -->
 <script src="https://unpkg.com/html5-qrcode"></script>
 
 <style>
 body {
-  margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont;
-  background: linear-gradient(135deg, #020617, #020617);
-  color: #fff;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.card {
-  background: rgba(15, 23, 42, 0.95);
-  padding: 2.5rem;
-  border-radius: 24px;
-  width: 100%;
-  max-width: 420px;
-  text-align: center;
-  box-shadow: 0 25px 70px rgba(0,0,0,.7);
+  background:#0b0b16;
+  color:#fff;
+  font-family:system-ui;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
 }
 #reader {
-  width: 100%;
-  margin-top: 1rem;
-  border-radius: 16px;
-  overflow: hidden;
+  width:320px;
 }
-.status {
-  margin-top: 1.2rem;
-  font-weight: 700;
-  font-size: 1.1rem;
+.result {
+  margin-top:20px;
+  font-weight:700;
 }
-.valid { color: #4ade80; }
-.used { color: #facc15; }
-.invalid { color: #f87171; }
-.ticket-box {
-  margin-top: 1rem;
-  background: rgba(30,41,59,.6);
-  padding: 1rem;
-  border-radius: 16px;
-  text-align: left;
-}
-button {
-  margin-top: 1rem;
-  width: 100%;
-  padding: 0.8rem;
-  border-radius: 14px;
-  border: none;
-  background: #38bdf8;
-  color: #020617;
-  font-weight: 700;
-  cursor: pointer;
-}
+.success { color:#4ade80; }
+.error { color:#f87171; }
 </style>
 </head>
+
 <body>
 
-<div class="card">
-  <h1>📷 Ticket Check‑in</h1>
-  <p>Scan ticket QR code</p>
-
+<div>
+  <h2>🎟️ Ticket Check-in</h2>
   <div id="reader"></div>
-  <div id="result"></div>
-  <button id="rescanBtn" style="display:none" onclick="startScanner()">Scan Another Ticket</button>
+  <div id="result" class="result"></div>
 </div>
 
 <script>
-// ================== SUPABASE CONFIG ==================
 const SUPABASE_URL = "https://ocnobfbigglpxoxsevkt.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbm9iZmJpZ2dscHhveHNldmt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4OTMzNjgsImV4cCI6MjA4MDQ2OTM2OH0.WONrpTEFiESu9t3Olq0LAnpuaXkwxRRfD8SzpBtNdMM";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const resultEl = document.getElementById('result');
-const rescanBtn = document.getElementById('rescanBtn');
-let html5QrCode;
-let scanning = true;
+const resultEl = document.getElementById("result");
 
-// ================== VERIFY TICKET ==================
-async function verifyTicket(ticketUrl) {
-  if (!ticketUrl.includes('ticketId=')) {
-    showResult('❌ Invalid QR Code', 'invalid');
-    return;
+function onScanSuccess(decodedText) {
+  try {
+    const url = new URL(decodedText);
+    const ticketId = url.searchParams.get("ticketId");
+    if (!ticketId) throw "Invalid QR";
+
+    checkTicket(ticketId);
+    html5QrcodeScanner.clear();
+  } catch {
+    resultEl.textContent = "❌ Invalid QR Code";
+    resultEl.className = "result error";
   }
+}
 
-  const ticketId = new URL(ticketUrl).searchParams.get('ticketId');
-
+async function checkTicket(ticketId) {
   const { data, error } = await supabaseClient
-    .from('tickets')
-    .select('*')
-    .eq('id', ticketId)
+    .from("tickets")
+    .select("used")
+    .eq("id", ticketId)
     .single();
 
   if (error || !data) {
-    showResult('❌ Ticket not found', 'invalid');
+    resultEl.textContent = "❌ Ticket not found";
+    resultEl.className = "result error";
     return;
   }
 
   if (data.used) {
-    resultEl.innerHTML = `
-      <div class='status used'>⚠️ Ticket Already Used</div>
-      <div class='ticket-box'>
-        <strong>Name:</strong> ${data.full_name}<br>
-        <strong>Type:</strong> ${data.ticket_type}
-      </div>
-    `;
-    rescanBtn.style.display = 'block';
+    resultEl.textContent = "⚠️ Ticket already used";
+    resultEl.className = "result error";
     return;
   }
 
   await supabaseClient
-    .from('tickets')
-    .update({ used: true, used_at: new Date().toISOString() })
-    .eq('id', ticketId);
+    .from("tickets")
+    .update({ used: true, used_at: new Date() })
+    .eq("id", ticketId);
 
-  resultEl.innerHTML = `
-    <div class='status valid'>✅ Check‑in Successful</div>
-    <div class='ticket-box'>
-      <strong>Name:</strong> ${data.full_name}<br>
-      <strong>Type:</strong> ${data.ticket_type}<br>
-      <strong>Quantity:</strong> ${data.quantity}
-    </div>
-  `;
-
-  rescanBtn.style.display = 'block';
+  resultEl.textContent = "✅ Check-in successful";
+  resultEl.className = "result success";
 }
 
-function showResult(message, type) {
-  resultEl.innerHTML = `<div class='status ${type}'>${message}</div>`;
-  rescanBtn.style.display = 'block';
-}
-
-// ================== START SCANNER (BACK CAMERA) ==================
-function startScanner() {
-  resultEl.innerHTML = '';
-  rescanBtn.style.display = 'none';
-  scanning = true;
-
-  html5QrCode = new Html5Qrcode('reader');
-
-  Html5Qrcode.getCameras().then(devices => {
-    if (!devices || devices.length === 0) {
-      showResult('❌ No camera found', 'invalid');
-      return;
-    }
-
-    let backCamera = devices.find(d =>
-      d.label.toLowerCase().includes('back') ||
-      d.label.toLowerCase().includes('rear') ||
-      d.label.toLowerCase().includes('environment')
-    );
-
-    if (!backCamera) backCamera = devices[devices.length - 1];
-
-    html5QrCode.start(
-      backCamera.id,
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      qrCodeMessage => {
-        if (!scanning) return;
-        scanning = false;
-        html5QrCode.stop();
-        verifyTicket(qrCodeMessage);
-      }
-    );
-
-  }).catch(() => {
-    showResult('❌ Camera permission denied', 'invalid');
-  });
-}
-
-// Auto start
-startScanner();
+const html5QrcodeScanner = new Html5Qrcode("reader");
+html5QrcodeScanner.start(
+  { facingMode: "environment" },
+  { fps: 10, qrbox: 250 },
+  onScanSuccess
+);
 </script>
 
 </body>
