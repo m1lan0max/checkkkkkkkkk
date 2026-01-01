@@ -5,8 +5,14 @@
 <title>Check In</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://unpkg.com/html5-qrcode"></script>
+
+<!-- ✅ FAST QR SCANNER -->
+<script type="module">
+  import QrScanner from "https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js";
+  window.QrScanner = QrScanner;
+</script>
 
 <style>
 body {
@@ -18,8 +24,9 @@ body {
   align-items:center;
   min-height:100vh;
 }
-#reader {
+video {
   width:320px;
+  border-radius:12px;
 }
 .result {
   margin-top:20px;
@@ -34,30 +41,46 @@ body {
 
 <div>
   <h2>🎟️ Ticket Check-in</h2>
-  <div id="reader"></div>
+  <video id="video"></video>
   <div id="result" class="result"></div>
 </div>
 
-<script>
+<script type="module">
 const SUPABASE_URL = "https://ocnobfbigglpxoxsevkt.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbm9iZmJpZ2dscHhveHNldmt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4OTMzNjgsImV4cCI6MjA4MDQ2OTM2OH0.WONrpTEFiESu9t3Olq0LAnpuaXkwxRRfD8SzpBtNdMM";
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+const video = document.getElementById("video");
 const resultEl = document.getElementById("result");
-let scanning = true;
 
-// ✅ QR فيه ticketId فقط
-async function onScanSuccess(decodedText) {
-  if (!scanning) return;
-  scanning = false;
+let locked = false;
 
-  const ticketId = decodedText.trim();
-  console.log("SCANNED ID:", ticketId);
+const scanner = new QrScanner(
+  video,
+  async result => {
+    if (locked) return;
+    locked = true;
 
-  await checkTicket(ticketId);
-  setTimeout(() => scanning = true, 2000); // يسمح بإعادة الاسكان
-}
+    const ticketId = result.data.trim();
+    console.log("SCANNED:", ticketId);
 
+    await checkTicket(ticketId);
+
+    setTimeout(() => locked = false, 2000);
+  },
+  {
+    highlightScanRegion: true,
+    highlightCodeOutline: true
+  }
+);
+
+scanner.start();
+
+/* ✅ Ticket validation */
 async function checkTicket(ticketId) {
   const { data, error } = await supabaseClient
     .from("tickets")
@@ -85,13 +108,6 @@ async function checkTicket(ticketId) {
   resultEl.textContent = `✅ Welcome ${data.full_name}`;
   resultEl.className = "result success";
 }
-
-const html5Qr = new Html5Qrcode("reader");
-html5Qr.start(
-  { facingMode: "environment" },
-  { fps: 10, qrbox: 250 },
-  onScanSuccess
-);
 </script>
 
 </body>
