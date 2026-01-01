@@ -56,8 +56,11 @@ const supabaseClient = supabase.createClient(
 
 const video = document.getElementById("video");
 const resultEl = document.getElementById("result");
-
 let locked = false;
+
+// أصوات قصيرة
+const successSound = new Audio("https://assets.codepen.io/3/success.mp3");
+const errorSound = new Audio("https://assets.codepen.io/3/error.mp3");
 
 const scanner = new QrScanner(
   video,
@@ -91,12 +94,20 @@ async function checkTicket(ticketId) {
   if (error || !data) {
     resultEl.textContent = "❌ Ticket not found";
     resultEl.className = "result error";
+
+    // اهتزاز قصير 300ms
+    navigator.vibrate && navigator.vibrate(300);
+    errorSound.play();
     return;
   }
 
   if (data.checked_in) {
     resultEl.textContent = "⚠️ Ticket already used";
     resultEl.className = "result error";
+
+    // اهتزاز طويل 600ms
+    navigator.vibrate && navigator.vibrate(600);
+    errorSound.play();
     return;
   }
 
@@ -107,8 +118,12 @@ async function checkTicket(ticketId) {
 
   resultEl.textContent = `✅ Welcome ${data.full_name}`;
   resultEl.className = "result success";
+
+  // اهتزاز سريع 150ms + صوت نجاح
+  navigator.vibrate && navigator.vibrate(150);
+  successSound.play();
 }
 </script>
 
-</body>
 </html>
+
