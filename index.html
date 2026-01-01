@@ -26,7 +26,9 @@ body {
 }
 video {
   width:320px;
+  height:240px; /* ضبط الدقة لتسريع المسح */
   border-radius:12px;
+  object-fit: cover;
 }
 .result {
   margin-top:20px;
@@ -49,15 +51,11 @@ video {
 const SUPABASE_URL = "https://ocnobfbigglpxoxsevkt.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jbm9iZmJpZ2dscHhveHNldmt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4OTMzNjgsImV4cCI6MjA4MDQ2OTM2OH0.WONrpTEFiESu9t3Olq0LAnpuaXkwxRRfD8SzpBtNdMM";
 
-const supabaseClient = supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const video = document.getElementById("video");
 const resultEl = document.getElementById("result");
 
-// Prevent double scans for the same ticket in a short time
 const scannedTickets = new Set();
 
 // Audio setup
@@ -68,14 +66,11 @@ const scanner = new QrScanner(
   video,
   async result => {
     const ticketId = result.data.trim();
-
-    // Ignore if scanned recently
     if (scannedTickets.has(ticketId)) return;
     scannedTickets.add(ticketId);
 
     await checkTicket(ticketId);
 
-    // Remove from set after 3 seconds
     setTimeout(() => scannedTickets.delete(ticketId), 3000);
   },
   {
@@ -84,37 +79,20 @@ const scanner = new QrScanner(
   }
 );
 
-// Start camera with low resolution for faster scanning
-QrScanner.hasCamera().then(hasCamera => {
-  if (hasCamera) {
-    scanner.start({
-      facingMode: "environment", // back camera
-      width: 320,
-      height: 240
-    });
-  } else {
-    console.error("No camera found!");
-  }
-});
+// Start scanner normally
+scanner.start().catch(e => console.error("Camera start failed:", e));
 
-// Show message for 2 seconds, play sound + vibrate
+// Show message with sound + vibrate
 function showResult(message, type) {
   resultEl.textContent = message;
   resultEl.className = `result ${type}`;
-
-  // Vibrate if supported
-  if (navigator.vibrate) {
-    navigator.vibrate(200);
-  }
-
-  // Play sound
+  if (navigator.vibrate) navigator.vibrate(200);
   if (type === "success") successSound.play();
   else if (type === "error") errorSound.play();
-
   setTimeout(() => resultEl.textContent = '', 2000);
 }
 
-/* ✅ Ticket validation */
+// Ticket validation
 async function checkTicket(ticketId) {
   const { data, error } = await supabaseClient
     .from("tickets")
