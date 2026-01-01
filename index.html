@@ -57,20 +57,19 @@ const supabaseClient = supabase.createClient(
 const video = document.getElementById("video");
 const resultEl = document.getElementById("result");
 
-let locked = false;
-
 const scanner = new QrScanner(
   video,
   async result => {
-    if (locked) return;
-    locked = true;
-
     const ticketId = result.data.trim();
     console.log("SCANNED:", ticketId);
 
+    // Stop scanner temporarily while processing
+    scanner.stop();
+
     await checkTicket(ticketId);
 
-    setTimeout(() => locked = false, 2000);
+    // Restart scanner after 1 second
+    setTimeout(() => scanner.start(), 1000);
   },
   {
     highlightScanRegion: true,
