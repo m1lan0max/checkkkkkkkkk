@@ -57,27 +57,62 @@ const supabaseClient = supabase.createClient(
 const video = document.getElementById("video");
 const resultEl = document.getElementById("result");
 
+// Prevent double scans for the same ticket in a short time
+const scannedTickets = new Set();
+
+// Audio setup
+const successSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+const errorSound = new Audio("https://actions.google.com/sounds/v1/cartoon/boing.ogg");
+
 const scanner = new QrScanner(
   video,
   async result => {
     const ticketId = result.data.trim();
-    console.log("SCANNED:", ticketId);
 
-    // Stop scanner temporarily while processing
-    scanner.stop();
+    // Ignore if scanned recently
+    if (scannedTickets.has(ticketId)) return;
+    scannedTickets.add(ticketId);
 
     await checkTicket(ticketId);
 
-    // Restart scanner after 1 second
-    setTimeout(() => scanner.start(), 1000);
+    // Remove from set after 3 seconds
+    setTimeout(() => scannedTickets.delete(ticketId), 3000);
   },
   {
-    highlightScanRegion: true,
-    highlightCodeOutline: true
+    highlightScanRegion: false,
+    highlightCodeOutline: false
   }
 );
 
-scanner.start();
+// Start camera with low resolution for faster scanning
+QrScanner.hasCamera().then(hasCamera => {
+  if (hasCamera) {
+    scanner.start({
+      facingMode: "environment", // back camera
+      width: 320,
+      height: 240
+    });
+  } else {
+    console.error("No camera found!");
+  }
+});
+
+// Show message for 2 seconds, play sound + vibrate
+function showResult(message, type) {
+  resultEl.textContent = message;
+  resultEl.className = `result ${type}`;
+
+  // Vibrate if supported
+  if (navigator.vibrate) {
+    navigator.vibrate(200);
+  }
+
+  // Play sound
+  if (type === "success") successSound.play();
+  else if (type === "error") errorSound.play();
+
+  setTimeout(() => resultEl.textContent = '', 2000);
+}
 
 /* ✅ Ticket validation */
 async function checkTicket(ticketId) {
@@ -88,14 +123,12 @@ async function checkTicket(ticketId) {
     .single();
 
   if (error || !data) {
-    resultEl.textContent = "❌ Ticket not found";
-    resultEl.className = "result error";
+    showResult("❌ Ticket not found", "error");
     return;
   }
 
   if (data.checked_in) {
-    resultEl.textContent = "⚠️ Ticket already used";
-    resultEl.className = "result error";
+    showResult("⚠️ Ticket already used", "error");
     return;
   }
 
@@ -104,8 +137,7 @@ async function checkTicket(ticketId) {
     .update({ checked_in: true, used_at: new Date() })
     .eq("id", ticketId);
 
-  resultEl.textContent = `✅ Welcome ${data.full_name}`;
-  resultEl.className = "result success";
+  showResult(`✅ Welcome ${data.full_name}`, "success");
 }
 </script>
 
