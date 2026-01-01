@@ -5,10 +5,7 @@
 <title>Check In</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<!-- ✅ FAST QR SCANNER -->
 <script type="module">
   import QrScanner from "https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js";
   window.QrScanner = QrScanner;
@@ -26,7 +23,7 @@ body {
 }
 video {
   width:320px;
-  height:240px; /* ضبط الدقة لتسريع المسح */
+  height:240px; /* أقل دقة = أسرع scan */
   border-radius:12px;
   object-fit: cover;
 }
@@ -56,41 +53,64 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const video = document.getElementById("video");
 const resultEl = document.getElementById("result");
 
-const scannedTickets = new Set();
+// Batch scanning
+let batchQueue = [];
+const batchDelay = 2000; // تحديث كل ثانيتين
 
 // Audio setup
 const successSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 const errorSound = new Audio("https://actions.google.com/sounds/v1/cartoon/boing.ogg");
 
+// Prevent double scan for 3 seconds per ticket
+const scannedTickets = new Set();
+
+// QR Scanner
 const scanner = new QrScanner(
   video,
-  async result => {
+  result => {
     const ticketId = result.data.trim();
     if (scannedTickets.has(ticketId)) return;
     scannedTickets.add(ticketId);
 
-    await checkTicket(ticketId);
+    batchQueue.push(ticketId); // add to batch
 
+    // Remove from set after 3s
     setTimeout(() => scannedTickets.delete(ticketId), 3000);
   },
-  {
-    highlightScanRegion: false,
-    highlightCodeOutline: false
-  }
+  { highlightScanRegion: false, highlightCodeOutline: false }
 );
 
-// Start scanner normally
-scanner.start().catch(e => console.error("Camera start failed:", e));
+// Start scanner with back camera
+QrScanner.hasCamera().then(hasCamera => {
+  if (hasCamera) scanner.start({ facingMode: "environment" });
+});
 
-// Show message with sound + vibrate
+// Show result, play sound + vibration
 function showResult(message, type) {
   resultEl.textContent = message;
   resultEl.className = `result ${type}`;
-  if (navigator.vibrate) navigator.vibrate(200);
+
+  if (navigator.vibrate) navigator.vibrate(type === "error" ? 500 : 200); // اهتزاز أطول للخطأ
   if (type === "success") successSound.play();
   else if (type === "error") errorSound.play();
+
   setTimeout(() => resultEl.textContent = '', 2000);
 }
+
+// Batch processing function
+async function processBatch() {
+  if (batchQueue.length === 0) return;
+
+  const ticketsToCheck = [...batchQueue];
+  batchQueue = []; // clear queue immediately
+
+  for (let ticketId of ticketsToCheck) {
+    await checkTicket(ticketId);
+  }
+}
+
+// Run batch every 2 seconds
+setInterval(processBatch, batchDelay);
 
 // Ticket validation
 async function checkTicket(ticketId) {
