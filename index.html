@@ -84,7 +84,7 @@ scanner.start();
 async function checkTicket(ticketId) {
   const { data, error } = await supabaseClient
     .from("tickets")
-    .select("id, used, full_name")
+    .select("id, checked_in, full_name")
     .eq("id", ticketId)
     .single();
 
@@ -94,7 +94,7 @@ async function checkTicket(ticketId) {
     return;
   }
 
-  if (data.used) {
+  if (data.checked_in) {
     resultEl.textContent = "⚠️ Ticket already used";
     resultEl.className = "result error";
     return;
@@ -102,7 +102,7 @@ async function checkTicket(ticketId) {
 
   await supabaseClient
     .from("tickets")
-    .update({ used: true, used_at: new Date() })
+    .update({ checked_in: true, used_at: new Date() })
     .eq("id", ticketId);
 
   resultEl.textContent = `✅ Welcome ${data.full_name}`;
